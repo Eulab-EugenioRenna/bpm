@@ -1,4 +1,4 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), playing: false, library: [], playlistId: null, audio: null, timer: null, nextBeat: 0, installPrompt: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), playing: false, library: [], playlistId: null, audio: null, timer: null, nextBeat: 0, installPrompt: null, deleteTrackId: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -46,6 +46,8 @@ function escapeHtml(s='') { const d=document.createElement('div'); d.textContent
 function findTrack(id) { return currentPlaylist()?.tracks.find(t => t.id === Number(id)); }
 function showScreen(id) { $$('.screen').forEach(s => s.classList.toggle('active', s.id===id)); $$('.bottom-nav a').forEach(a => a.classList.toggle('active', a.dataset.screen===id)); }
 function openTrack(track) { const form=$('#trackForm'); form.reset(); form.elements.id.value=track?.id||''; form.elements.title.value=track?.title||''; form.elements.artist.value=track?.artist||''; form.elements.bpm.value=track?.bpm||state.bpm; $('#trackDialogTitle').textContent=track?'Modifica brano':'Nuovo brano'; $('#trackDialog').showModal(); }
+function openDeleteDialog(track) { state.deleteTrackId=track.id; $('#deleteTrackName').textContent=track.title; $('#deleteDialog').showModal(); }
+function closeDeleteDialog() { state.deleteTrackId=null; $('#deleteDialog').close(); }
 function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
 function installDismissedRecently() { const dismissed=Number(localStorage.getItem('installDismissedAt')||0); return Date.now()-dismissed < 7*24*60*60*1000; }
 function showInstallBanner() { if(isStandalone()||installDismissedRecently()) return; const banner=$('#installBanner'); banner.hidden=false; requestAnimationFrame(()=>banner.classList.add('visible')); }
@@ -64,10 +66,12 @@ document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
   const edit=e.target.closest('[data-edit]'); if(edit){openTrack(findTrack(edit.dataset.edit));return;}
-  const del=e.target.closest('[data-delete]'); if(del && confirm('Eliminare questo brano?')){await api(`/api/tracks/${del.dataset.delete}`,{method:'DELETE'});await loadLibrary();toast('Brano eliminato');}
+  const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
 });
 $('#trackForm').addEventListener('submit', async e => { e.preventDefault(); const f=new FormData(e.target), id=f.get('id'); const body={title:f.get('title'),artist:f.get('artist'),bpm:Number(f.get('bpm')),playlist_id:state.playlistId}; try{await api(id?`/api/tracks/${id}`:'/api/tracks',{method:id?'PUT':'POST',body:JSON.stringify(body)});$('#trackDialog').close();await loadLibrary();toast(id?'Brano aggiornato':'Brano aggiunto');}catch(err){toast(err.message);} });
-$$('.dialog-close,.cancel-button').forEach(b=>b.addEventListener('click',()=>$('#trackDialog').close()));
+$$('.dialog-close,#trackForm .cancel-button').forEach(b=>b.addEventListener('click',()=>$('#trackDialog').close()));
+$('#cancelDelete').addEventListener('click',closeDeleteDialog);
+$('#confirmDelete').addEventListener('click',async()=>{if(!state.deleteTrackId)return;const id=state.deleteTrackId;try{await api(`/api/tracks/${id}`,{method:'DELETE'});closeDeleteDialog();await loadLibrary();toast('Brano eliminato');}catch(error){toast(error.message);}});
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();state.installPrompt=event;showInstallBanner();});
 window.addEventListener('appinstalled',()=>{state.installPrompt=null;hideInstallBanner();toast('BPM Studio installata');});
 $('#installButton').addEventListener('click',async()=>{
@@ -78,5 +82,5 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=3', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=5', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
