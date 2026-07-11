@@ -106,6 +106,19 @@
       <div class="dialog-actions"><button type="button" class="cancel-button">ANNULLA</button><button class="primary-button" value="default">SALVA BRANO</button></div>
     </form>
   </dialog>
+  <dialog id="playlistDialog">
+    <form id="playlistForm" method="dialog">
+      <div class="dialog-head">
+        <div><p class="section-label">LIBRERIA</p><h2>Nuova playlist</h2></div>
+        <button type="button" id="closePlaylistDialog" class="dialog-close" aria-label="Chiudi">×</button>
+      </div>
+      <label>NOME PLAYLIST<input name="name" required maxlength="80" autocomplete="off" placeholder="Es. Live set estate"></label>
+      <div class="dialog-actions">
+        <button type="button" id="cancelPlaylist" class="cancel-button">ANNULLA</button>
+        <button class="primary-button" value="default">CREA PLAYLIST</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="deleteDialog" class="delete-dialog">
     <div class="delete-dialog-body">
       <div class="delete-symbol" aria-hidden="true">

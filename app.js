@@ -46,6 +46,7 @@ function escapeHtml(s='') { const d=document.createElement('div'); d.textContent
 function findTrack(id) { return currentPlaylist()?.tracks.find(t => t.id === Number(id)); }
 function showScreen(id) { $$('.screen').forEach(s => s.classList.toggle('active', s.id===id)); $$('.bottom-nav a').forEach(a => a.classList.toggle('active', a.dataset.screen===id)); }
 function openTrack(track) { const form=$('#trackForm'); form.reset(); form.elements.id.value=track?.id||''; form.elements.title.value=track?.title||''; form.elements.artist.value=track?.artist||''; form.elements.bpm.value=track?.bpm||state.bpm; $('#trackDialogTitle').textContent=track?'Modifica brano':'Nuovo brano'; $('#trackDialog').showModal(); }
+function openPlaylistDialog() { const form=$('#playlistForm'); form.reset(); $('#playlistDialog').showModal(); requestAnimationFrame(()=>form.elements.name.focus()); }
 function openDeleteDialog(track) { state.deleteTrackId=track.id; $('#deleteTrackName').textContent=track.title; $('#deleteDialog').showModal(); }
 function closeDeleteDialog() { state.deleteTrackId=null; $('#deleteDialog').close(); }
 function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
@@ -61,7 +62,7 @@ $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Nu
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
 $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showScreen('tracks'); });
 $('#newTrackButton').addEventListener('click', () => state.playlistId ? openTrack() : toast('Crea prima una playlist'));
-$('#newPlaylistButton').addEventListener('click', async () => { const name=prompt('Nome della nuova playlist'); if (!name?.trim()) return; try { const p=await api('/api/playlists',{method:'POST',body:JSON.stringify({name})}); state.playlistId=p.id; await loadLibrary(); } catch(e){ toast(e.message); } });
+$('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
@@ -69,7 +70,10 @@ document.addEventListener('click', async e => {
   const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
 });
 $('#trackForm').addEventListener('submit', async e => { e.preventDefault(); const f=new FormData(e.target), id=f.get('id'); const body={title:f.get('title'),artist:f.get('artist'),bpm:Number(f.get('bpm')),playlist_id:state.playlistId}; try{await api(id?`/api/tracks/${id}`:'/api/tracks',{method:id?'PUT':'POST',body:JSON.stringify(body)});$('#trackDialog').close();await loadLibrary();toast(id?'Brano aggiornato':'Brano aggiunto');}catch(err){toast(err.message);} });
-$$('.dialog-close,#trackForm .cancel-button').forEach(b=>b.addEventListener('click',()=>$('#trackDialog').close()));
+$('#playlistForm').addEventListener('submit',async e=>{e.preventDefault();const name=new FormData(e.target).get('name')?.trim();if(!name)return;try{const playlist=await api('/api/playlists',{method:'POST',body:JSON.stringify({name})});state.playlistId=playlist.id;$('#playlistDialog').close();await loadLibrary();toast('Playlist creata');}catch(error){toast(error.message);}});
+$$('#trackDialog .dialog-close,#trackForm .cancel-button').forEach(b=>b.addEventListener('click',()=>$('#trackDialog').close()));
+$('#closePlaylistDialog').addEventListener('click',()=>$('#playlistDialog').close());
+$('#cancelPlaylist').addEventListener('click',()=>$('#playlistDialog').close());
 $('#cancelDelete').addEventListener('click',closeDeleteDialog);
 $('#confirmDelete').addEventListener('click',async()=>{if(!state.deleteTrackId)return;const id=state.deleteTrackId;try{await api(`/api/tracks/${id}`,{method:'DELETE'});closeDeleteDialog();await loadLibrary();toast('Brano eliminato');}catch(error){toast(error.message);}});
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();state.installPrompt=event;showInstallBanner();});
@@ -82,5 +86,5 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=6', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=7', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
