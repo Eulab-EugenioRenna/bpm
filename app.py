@@ -1,13 +1,50 @@
 #!/usr/bin/env python3
 import json
 import mimetypes
+import queue
 import sqlite3
+import threading
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / "bpm.sqlite3"
+
+
+class EventBus:
+    def __init__(self):
+        self.clients = set()
+        self.lock = threading.Lock()
+        self.revision = 0
+
+    def subscribe(self):
+        channel = queue.Queue(maxsize=20)
+        with self.lock:
+            self.clients.add(channel)
+        return channel
+
+    def unsubscribe(self, channel):
+        with self.lock:
+            self.clients.discard(channel)
+
+    def publish(self, resource, action, source=""):
+        with self.lock:
+            self.revision += 1
+            event = {"revision": self.revision, "resource": resource, "action": action, "source": source}
+            clients = tuple(self.clients)
+        for channel in clients:
+            try:
+                channel.put_nowait(event)
+            except queue.Full:
+                try:
+                    channel.get_nowait()
+                    channel.put_nowait(event)
+                except queue.Empty:
+                    pass
+
+
+events = EventBus()
 
 
 def connection():
@@ -45,6 +82,8 @@ def setup():
 
 
 class Handler(SimpleHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def translate_path(self, path):
         clean = urlparse(path).path.lstrip("/") or "index.html"
         return str(ROOT / clean)
@@ -68,6 +107,30 @@ class Handler(SimpleHTTPRequestHandler):
             return None
 
     def do_GET(self):
+        if urlparse(self.path).path == "/api/events":
+            channel = events.subscribe()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-transform")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            try:
+                self.wfile.write(b"retry: 2000\nevent: ready\ndata: {}\n\n")
+                self.wfile.flush()
+                while True:
+                    try:
+                        event = channel.get(timeout=15)
+                        payload = json.dumps(event, ensure_ascii=False).encode()
+                        self.wfile.write(b"event: library\ndata: " + payload + b"\n\n")
+                    except queue.Empty:
+                        self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                events.unsubscribe(channel)
+            return
         if self.path == "/api/library":
             with connection() as db:
                 playlists = [dict(row) for row in db.execute("SELECT id,name FROM playlists ORDER BY id")]
@@ -89,6 +152,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json({"error": "Il nome è obbligatorio"}, 422)
             with connection() as db:
                 cursor = db.execute("INSERT INTO playlists(name) VALUES (?)", (name,))
+            events.publish("playlist", "created", self.headers.get("X-Client-ID", ""))
             return self.json({"id": cursor.lastrowid, "name": name, "tracks": []}, 201)
         if self.path == "/api/tracks":
             try:
@@ -105,6 +169,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "INSERT INTO tracks(playlist_id,title,artist,bpm,position) VALUES (?,?,?,?,?)",
                         (playlist_id, title, artist, bpm, position),
                     )
+                events.publish("track", "created", self.headers.get("X-Client-ID", ""))
                 return self.json({"id": cursor.lastrowid}, 201)
             except (KeyError, ValueError, sqlite3.IntegrityError):
                 return self.json({"error": "Dati del brano non validi"}, 422)
@@ -130,6 +195,7 @@ class Handler(SimpleHTTPRequestHandler):
                     db.execute("UPDATE tracks SET title=?,artist=?,bpm=? WHERE id=?", (title, artist, bpm, item_id))
                 else:
                     return self.send_error(404)
+            events.publish(parts[1][:-1], "updated", self.headers.get("X-Client-ID", ""))
             return self.json({"ok": True})
         except (KeyError, ValueError):
             return self.json({"error": "Dati non validi"}, 422)
@@ -145,6 +211,7 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_error(404)
             with connection() as db:
                 db.execute(f"DELETE FROM {table} WHERE id=?", (item_id,))
+            events.publish(parts[1][:-1], "deleted", self.headers.get("X-Client-ID", ""))
             return self.json({"ok": True})
         except ValueError:
             return self.json({"error": "ID non valido"}, 400)

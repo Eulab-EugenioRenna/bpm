@@ -1,9 +1,9 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), playing: false, library: [], playlistId: null, audio: null, timer: null, nextBeat: 0, installPrompt: null, deleteTrackId: null, deletePlaylistId: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, playing: false, library: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(el.timer); el.timer = setTimeout(() => el.classList.remove('show'), 1800); }
-async function api(path, options = {}) { const response = await fetch(path, { headers: {'Content-Type':'application/json'}, ...options }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Errore'); return data; }
+async function api(path, options = {}) { const response = await fetch(path, { ...options, headers: {'Content-Type':'application/json','X-Client-ID':state.clientId,...options.headers} }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Errore'); return data; }
 async function loadLibrary() { state.library = await api('/api/library'); if (!state.playlistId || !state.library.some(p => p.id === state.playlistId)) state.playlistId = state.library[0]?.id || null; render(); }
 function currentPlaylist() { return state.library.find(p => p.id === state.playlistId); }
 const solidIcon = {
@@ -18,18 +18,20 @@ function setBpm(value) {
   $('#bpmSlider').style.setProperty('--fill', `${(state.bpm - 20) / 280 * 100}%`);
   localStorage.setItem('bpm', state.bpm);
 }
-function click() {
+function click(accent=true) {
   const ctx = state.audio; if (!ctx) return;
   const osc = ctx.createOscillator(), gain = ctx.createGain();
-  osc.frequency.value = 1100; gain.gain.setValueAtTime(.22, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .045);
-  osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + .05);
-  const pulse = $('#pulse'); pulse.classList.remove('beat'); requestAnimationFrame(() => pulse.classList.add('beat'));
+  osc.frequency.value = accent ? 1380 : 720; gain.gain.setValueAtTime(accent ? .28 : .11, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + (accent ? .06 : .035));
+  osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (accent ? .065 : .04));
+  const pulse = $('#pulse'); pulse.classList.remove('beat','secondary'); requestAnimationFrame(() => { pulse.classList.toggle('secondary',!accent); pulse.classList.add('beat'); });
 }
-function schedule() { if (!state.playing) return; click(); state.timer = setTimeout(schedule, 60000 / state.bpm); }
+function schedule() { if (!state.playing) return; const accent=state.subdivision%state.subdivisionMode===0; click(accent); state.subdivision+=1; state.timer=setTimeout(schedule,60000/state.bpm/state.subdivisionMode); }
+function renderDivision() { $$('.division-option').forEach(button=>{const active=Number(button.dataset.subdivision)===state.subdivisionMode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}); }
+function setDivision(value) { state.subdivisionMode=Number(value);state.subdivision=0;localStorage.setItem('subdivisionMode',state.subdivisionMode);renderDivision();if(state.playing){clearTimeout(state.timer);schedule();}const labels={1:'Quarti',2:'Ottavi',3:'Terzine',4:'Sedicesimi'};toast(`Suddivisione: ${labels[state.subdivisionMode]}`); }
 function togglePlay() {
   state.playing = !state.playing; const button = $('#playButton'); button.classList.toggle('playing', state.playing); button.ariaLabel = state.playing ? 'Pausa metronomo' : 'Avvia metronomo';
-  if (state.playing) { state.audio ||= new (window.AudioContext || window.webkitAudioContext)(); state.audio.resume(); schedule(); }
-  else clearTimeout(state.timer);
+  if (state.playing) { state.subdivision=0; state.audio ||= new (window.AudioContext || window.webkitAudioContext)(); state.audio.resume(); schedule(); }
+  else { clearTimeout(state.timer); state.subdivision=0; }
 }
 function useTrack(track) { setBpm(track.bpm); location.hash = 'player'; showScreen('player'); toast(`${track.title} · ${track.bpm} BPM`); }
 
@@ -51,6 +53,17 @@ function openDeleteDialog(track) { state.deleteTrackId=track.id; $('#deleteTrack
 function closeDeleteDialog() { state.deleteTrackId=null; $('#deleteDialog').close(); }
 function openDeletePlaylistDialog(playlist) { state.deletePlaylistId=playlist.id; $('#deletePlaylistName').textContent=playlist.name; const count=playlist.tracks.length; $('#deletePlaylistTrackCount').textContent=`${count} ${count===1?'brano':'brani'}`; $('#deletePlaylistDialog').showModal(); }
 function closeDeletePlaylistDialog() { state.deletePlaylistId=null; $('#deletePlaylistDialog').close(); }
+function connectRealtime() {
+  const stream = new EventSource('/api/events');
+  stream.addEventListener('library',event=>{
+    const update=JSON.parse(event.data);
+    if(update.source===state.clientId)return;
+    clearTimeout(state.syncTimer);
+    state.syncTimer=setTimeout(()=>loadLibrary().then(()=>toast('Libreria aggiornata')).catch(()=>{}),100);
+  });
+  stream.addEventListener('open',()=>document.querySelector('.status span').textContent='SYNC');
+  stream.addEventListener('error',()=>document.querySelector('.status span').textContent='RECONNECT');
+}
 function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
 function installDismissedRecently() { const dismissed=Number(localStorage.getItem('installDismissedAt')||0); return Date.now()-dismissed < 7*24*60*60*1000; }
 function showInstallBanner() { if(isStandalone()||installDismissedRecently()) return; const banner=$('#installBanner'); banner.hidden=false; requestAnimationFrame(()=>banner.classList.add('visible')); }
@@ -60,6 +73,7 @@ $('#bpmSlider').addEventListener('input', e => setBpm(e.target.value));
 $('#bpmInput').addEventListener('change', e => setBpm(e.target.value));
 $('#bpmInput').addEventListener('focus', e => e.target.select());
 $('#playButton').addEventListener('click', togglePlay);
+$$('.division-option').forEach(button=>button.addEventListener('click',()=>setDivision(button.dataset.subdivision)));
 $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Number(b.dataset.delta))));
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
 $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showScreen('tracks'); });
@@ -90,6 +104,7 @@ $('#installButton').addEventListener('click',async()=>{
 });
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
-setBpm(state.bpm); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=8', {updateViaCache:'none'});
+setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=11', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
+connectRealtime();
