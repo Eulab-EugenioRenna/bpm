@@ -1,4 +1,4 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, playing: false, library: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -12,11 +12,12 @@ const solidIcon = {
   trash: '<svg viewBox="0 0 448 512" aria-hidden="true"><path d="M136 17C140 7 150 0 161 0h126c11 0 21 7 25 17l11 31h77c13 0 24 11 24 24s-11 24-24 24H48C35 96 24 85 24 72s11-24 24-24h77l11-31zm-88 95h352l-16 354c-1 26-22 46-48 46H112c-26 0-47-20-48-46L48 112z"/></svg>'
 };
 
-function setBpm(value) {
+function setBpm(value, trackId=null) {
   state.bpm = Math.max(20, Math.min(300, Math.round(Number(value) || 120)));
+  state.selectedTrackId=trackId;
   $('#bpmInput').value = state.bpm; $('#bpmSlider').value = state.bpm;
   $('#bpmSlider').style.setProperty('--fill', `${(state.bpm - 20) / 280 * 100}%`);
-  $$('.compact-track[data-bpm]').forEach(pad=>pad.classList.toggle('active',Number(pad.dataset.bpm)===state.bpm));
+  $$('.compact-track').forEach(pad=>pad.classList.toggle('active',Number(pad.dataset.use)===state.selectedTrackId));
   localStorage.setItem('bpm', state.bpm);
 }
 function click(accent=true) {
@@ -34,7 +35,8 @@ function togglePlay() {
   if (state.playing) { state.subdivision=0; state.audio ||= new (window.AudioContext || window.webkitAudioContext)(); state.audio.resume(); schedule(); }
   else { clearTimeout(state.timer); state.subdivision=0; }
 }
-function useTrack(track) { setBpm(track.bpm); location.hash = 'player'; showScreen('player'); toast(`${track.title} · ${track.bpm} BPM`); }
+function useTrack(track) { setBpm(track.bpm,track.id); location.hash='player';showScreen('player');const pad=$(`.compact-track[data-use="${track.id}"]`);if(pad){$$('.compact-track').forEach(item=>item.classList.remove('launched'));requestAnimationFrame(()=>{pad.classList.add('launched');setTimeout(()=>pad.classList.remove('launched'),450);});}toast(`${track.title} · ${track.bpm} BPM`); }
+function tapTempo() { const now=performance.now(),last=state.tapTimes.at(-1);if(last&&now-last>2000)state.tapTimes=[];state.tapTimes.push(now);if(state.tapTimes.length>6)state.tapTimes.shift();const pulse=$('#pulse');pulse.classList.remove('beat','secondary');requestAnimationFrame(()=>pulse.classList.add('beat'));if(state.tapTimes.length<2)return;const intervals=state.tapTimes.slice(1).map((time,index)=>time-state.tapTimes[index]);const average=intervals.reduce((sum,value)=>sum+value,0)/intervals.length;const bpm=Math.round(60000/average);if(bpm>=20&&bpm<=300)setBpm(bpm); }
 
 function render() {
   const playlist = currentPlaylist();
@@ -42,7 +44,7 @@ function render() {
   $('#trackCount').textContent = `${playlist?.tracks.length || 0} BRANI`;
   $('#playlistList').innerHTML = state.library.map(p => `<div class="playlist-item ${p.id===state.playlistId?'active':''}"><button class="playlist-select" data-playlist="${p.id}"><b>${escapeHtml(p.name)}</b><span>${p.tracks.length}</span></button><button class="playlist-delete" data-delete-playlist="${p.id}" aria-label="Elimina playlist ${escapeHtml(p.name)}" title="Elimina playlist">${solidIcon.trash}</button></div>`).join('');
   const empty = '<div class="empty">Nessun brano in questa playlist.</div>';
-  $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<button class="compact-track ${t.bpm===state.bpm?'active':''}" data-use="${t.id}" data-bpm="${t.bpm}" aria-label="Imposta ${escapeHtml(t.title)}, ${t.bpm} BPM"><i aria-hidden="true"></i><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></button>`).join('') : empty;
+  $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<button class="compact-track ${t.id===state.selectedTrackId?'active':''}" data-use="${t.id}" data-bpm="${t.bpm}" aria-label="Imposta ${escapeHtml(t.title)}, ${t.bpm} BPM"><i aria-hidden="true"></i><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></button>`).join('') : empty;
   $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button class="action-use" data-use="${t.id}" title="Usa BPM" aria-label="Usa BPM di ${escapeHtml(t.title)}">${solidIcon.play}</button><button class="action-edit" data-edit="${t.id}" title="Modifica" aria-label="Modifica ${escapeHtml(t.title)}">${solidIcon.edit}</button><button class="action-delete" data-delete="${t.id}" title="Elimina" aria-label="Elimina ${escapeHtml(t.title)}">${solidIcon.trash}</button></div></div>`).join('') : empty;
 }
 function escapeHtml(s='') { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -74,6 +76,7 @@ $('#bpmSlider').addEventListener('input', e => setBpm(e.target.value));
 $('#bpmInput').addEventListener('change', e => setBpm(e.target.value));
 $('#bpmInput').addEventListener('focus', e => e.target.select());
 $('#playButton').addEventListener('click', togglePlay);
+$('#pulse').addEventListener('click',tapTempo);
 $$('.division-option').forEach(button=>button.addEventListener('click',()=>setDivision(button.dataset.subdivision)));
 $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Number(b.dataset.delta))));
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
@@ -83,7 +86,7 @@ $('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const deletePlaylist=e.target.closest('[data-delete-playlist]'); if(deletePlaylist){const item=state.library.find(p=>p.id===Number(deletePlaylist.dataset.deletePlaylist));if(item)openDeletePlaylistDialog(item);return;}
-  const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t){if(use.classList.contains('compact-track')){use.classList.remove('launched');requestAnimationFrame(()=>use.classList.add('launched'));}useTrack(t);}return;}
+  const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
   const edit=e.target.closest('[data-edit]'); if(edit){openTrack(findTrack(edit.dataset.edit));return;}
   const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
 });
@@ -106,6 +109,6 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=12', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=13', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
