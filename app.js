@@ -6,6 +6,11 @@ function toast(message) { const el = $('#toast'); el.textContent = message; el.c
 async function api(path, options = {}) { const response = await fetch(path, { headers: {'Content-Type':'application/json'}, ...options }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Errore'); return data; }
 async function loadLibrary() { state.library = await api('/api/library'); if (!state.playlistId || !state.library.some(p => p.id === state.playlistId)) state.playlistId = state.library[0]?.id || null; render(); }
 function currentPlaylist() { return state.library.find(p => p.id === state.playlistId); }
+const solidIcon = {
+  play: '<svg viewBox="0 0 384 512" aria-hidden="true"><path d="M64 32c-18 0-32 14-32 32v384c0 18 14 32 32 32 7 0 13-2 19-6l272-192c9-6 13-16 13-26s-4-20-13-26L83 38c-6-4-12-6-19-6z"/></svg>',
+  edit: '<svg viewBox="0 0 512 512" aria-hidden="true"><path d="M471 17c-23-23-60-23-83 0L364 41l107 107 24-24c23-23 23-60 0-83l-24-24zM344 61 54 351c-6 6-10 13-12 21L1 484c-3 8-1 17 5 23s15 8 23 5l112-41c8-2 15-6 21-12l289-290L344 61z"/></svg>',
+  trash: '<svg viewBox="0 0 448 512" aria-hidden="true"><path d="M136 17C140 7 150 0 161 0h126c11 0 21 7 25 17l11 31h77c13 0 24 11 24 24s-11 24-24 24H48C35 96 24 85 24 72s11-24 24-24h77l11-31zm-88 95h352l-16 354c-1 26-22 46-48 46H112c-26 0-47-20-48-46L48 112z"/></svg>'
+};
 
 function setBpm(value) {
   state.bpm = Math.max(20, Math.min(300, Math.round(Number(value) || 120)));
@@ -35,7 +40,7 @@ function render() {
   $('#playlistList').innerHTML = state.library.map(p => `<button class="playlist-item ${p.id===state.playlistId?'active':''}" data-playlist="${p.id}"><b>${escapeHtml(p.name)}</b><span>${p.tracks.length}</span></button>`).join('');
   const empty = '<div class="empty">Nessun brano in questa playlist.</div>';
   $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<div class="compact-track ${t.bpm===state.bpm?'active':''}" data-use="${t.id}"><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></div>`).join('') : empty;
-  $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button data-use="${t.id}" title="Usa BPM">▶</button><button data-edit="${t.id}" title="Modifica">✎</button><button data-delete="${t.id}" title="Elimina">×</button></div></div>`).join('') : empty;
+  $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button class="action-use" data-use="${t.id}" title="Usa BPM" aria-label="Usa BPM di ${escapeHtml(t.title)}">${solidIcon.play}</button><button class="action-edit" data-edit="${t.id}" title="Modifica" aria-label="Modifica ${escapeHtml(t.title)}">${solidIcon.edit}</button><button class="action-delete" data-delete="${t.id}" title="Elimina" aria-label="Elimina ${escapeHtml(t.title)}">${solidIcon.trash}</button></div></div>`).join('') : empty;
 }
 function escapeHtml(s='') { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 function findTrack(id) { return currentPlaylist()?.tracks.find(t => t.id === Number(id)); }
