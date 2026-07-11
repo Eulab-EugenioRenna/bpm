@@ -1,10 +1,10 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], songs: [], songQuery: '', playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
 function toast(message) { const el = $('#toast'); el.textContent = message; el.classList.add('show'); clearTimeout(el.timer); el.timer = setTimeout(() => el.classList.remove('show'), 1800); }
 async function api(path, options = {}) { const response = await fetch(path, { ...options, headers: {'Content-Type':'application/json','X-Client-ID':state.clientId,...options.headers} }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Errore'); return data; }
-async function loadLibrary() { state.library = await api('/api/library'); if (!state.playlistId || !state.library.some(p => p.id === state.playlistId)) state.playlistId = state.library[0]?.id || null; render(); }
+async function loadLibrary() { [state.library,state.songs]=await Promise.all([api('/api/library'),api('/api/songs')]); if (!state.playlistId || !state.library.some(p => p.id === state.playlistId)) state.playlistId = state.library[0]?.id || null; render(); }
 function currentPlaylist() { return state.library.find(p => p.id === state.playlistId); }
 const solidIcon = {
   play: '<svg viewBox="0 0 384 512" aria-hidden="true"><path d="M64 32c-18 0-32 14-32 32v384c0 18 14 32 32 32 7 0 13-2 19-6l272-192c9-6 13-16 13-26s-4-20-13-26L83 38c-6-4-12-6-19-6z"/></svg>',
@@ -37,6 +37,7 @@ function togglePlay() {
 }
 function useTrack(track) { setBpm(track.bpm,track.id); location.hash='player';showScreen('player');const pad=$(`.compact-track[data-use="${track.id}"]`);if(pad){$$('.compact-track').forEach(item=>item.classList.remove('launched'));requestAnimationFrame(()=>{pad.classList.add('launched');setTimeout(()=>pad.classList.remove('launched'),450);});}toast(`${track.title} · ${track.bpm} BPM`); }
 function tapTempo() { const now=performance.now(),last=state.tapTimes.at(-1);if(last&&now-last>2000)state.tapTimes=[];state.tapTimes.push(now);if(state.tapTimes.length>6)state.tapTimes.shift();const pulse=$('#pulse');pulse.classList.remove('beat','secondary');requestAnimationFrame(()=>pulse.classList.add('beat'));if(state.tapTimes.length<2)return;const intervals=state.tapTimes.slice(1).map((time,index)=>time-state.tapTimes[index]);const average=intervals.reduce((sum,value)=>sum+value,0)/intervals.length;const bpm=Math.round(60000/average);if(bpm>=20&&bpm<=300)setBpm(bpm); }
+function renderSongCatalog() { const playlist=currentPlaylist(),existing=new Set((playlist?.tracks||[]).map(track=>track.song_id));const query=state.songQuery.trim().toLocaleLowerCase('it');const matches=state.songs.filter(song=>!query||`${song.title} ${song.artist} ${song.bpm}`.toLocaleLowerCase('it').includes(query)).slice(0,8);$('#songLibraryCount').textContent=`${state.songs.length} SALVATI`;$('#songCatalogResults').innerHTML=matches.length?matches.map(song=>{const added=existing.has(song.id);return `<div class="catalog-song"><div><b>${escapeHtml(song.title)}</b><span>${escapeHtml(song.artist)||'Artista non indicato'}</span></div><strong>${song.bpm}</strong><button data-add-song="${song.id}" ${added?'disabled':''}>${added?'IMPORTATO':'＋ IMPORTA'}</button></div>`;}).join(''):`<div class="catalog-empty">Nessun brano trovato.</div>`; }
 
 function render() {
   const playlist = currentPlaylist();
@@ -46,6 +47,7 @@ function render() {
   const empty = '<div class="empty">Nessun brano in questa playlist.</div>';
   $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<button class="compact-track ${t.id===state.selectedTrackId?'active':''}" data-use="${t.id}" data-bpm="${t.bpm}" aria-label="Imposta ${escapeHtml(t.title)}, ${t.bpm} BPM"><i aria-hidden="true"></i><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></button>`).join('') : empty;
   $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button class="action-use" data-use="${t.id}" title="Usa BPM" aria-label="Usa BPM di ${escapeHtml(t.title)}">${solidIcon.play}</button><button class="action-edit" data-edit="${t.id}" title="Modifica" aria-label="Modifica ${escapeHtml(t.title)}">${solidIcon.edit}</button><button class="action-delete" data-delete="${t.id}" title="Elimina" aria-label="Elimina ${escapeHtml(t.title)}">${solidIcon.trash}</button></div></div>`).join('') : empty;
+  renderSongCatalog();
 }
 function escapeHtml(s='') { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 function findTrack(id) { return currentPlaylist()?.tracks.find(t => t.id === Number(id)); }
@@ -81,16 +83,18 @@ $$('.division-option').forEach(button=>button.addEventListener('click',()=>setDi
 $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Number(b.dataset.delta))));
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
 $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showScreen('tracks'); });
-$('#newTrackButton').addEventListener('click', () => state.playlistId ? openTrack() : toast('Crea prima una playlist'));
+$('#newTrackButton').addEventListener('click',()=>openTrack());
 $('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
+$('#songSearch').addEventListener('input',event=>{state.songQuery=event.target.value;renderSongCatalog();});
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const deletePlaylist=e.target.closest('[data-delete-playlist]'); if(deletePlaylist){const item=state.library.find(p=>p.id===Number(deletePlaylist.dataset.deletePlaylist));if(item)openDeletePlaylistDialog(item);return;}
+  const addSong=e.target.closest('[data-add-song]');if(addSong&&!addSong.disabled){if(!state.playlistId){toast('Crea prima una playlist');return;}addSong.disabled=true;try{await api('/api/playlist-tracks',{method:'POST',body:JSON.stringify({playlist_id:state.playlistId,song_id:Number(addSong.dataset.addSong)})});await loadLibrary();toast('Brano aggiunto alla playlist');}catch(error){addSong.disabled=false;toast(error.message);}return;}
   const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
   const edit=e.target.closest('[data-edit]'); if(edit){openTrack(findTrack(edit.dataset.edit));return;}
   const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
 });
-$('#trackForm').addEventListener('submit', async e => { e.preventDefault(); const f=new FormData(e.target), id=f.get('id'); const body={title:f.get('title'),artist:f.get('artist'),bpm:Number(f.get('bpm')),playlist_id:state.playlistId}; try{await api(id?`/api/tracks/${id}`:'/api/tracks',{method:id?'PUT':'POST',body:JSON.stringify(body)});$('#trackDialog').close();await loadLibrary();toast(id?'Brano aggiornato':'Brano aggiunto');}catch(err){toast(err.message);} });
+$('#trackForm').addEventListener('submit', async e => { e.preventDefault(); const f=new FormData(e.target), id=f.get('id'); const body={title:f.get('title'),artist:f.get('artist'),bpm:Number(f.get('bpm'))}; try{await api(id?`/api/tracks/${id}`:'/api/songs',{method:id?'PUT':'POST',body:JSON.stringify(body)});$('#trackDialog').close();await loadLibrary();toast(id?'Brano aggiornato ovunque':'Brano salvato nella libreria');}catch(err){toast(err.message);} });
 $('#playlistForm').addEventListener('submit',async e=>{e.preventDefault();const name=new FormData(e.target).get('name')?.trim();if(!name)return;try{const playlist=await api('/api/playlists',{method:'POST',body:JSON.stringify({name})});state.playlistId=playlist.id;$('#playlistDialog').close();await loadLibrary();toast('Playlist creata');}catch(error){toast(error.message);}});
 $$('#trackDialog .dialog-close,#trackForm .cancel-button').forEach(b=>b.addEventListener('click',()=>$('#trackDialog').close()));
 $('#closePlaylistDialog').addEventListener('click',()=>$('#playlistDialog').close());
@@ -109,7 +113,7 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=14', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=16', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)){

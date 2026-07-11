@@ -72,7 +72,7 @@
       <section id="tracks" class="screen" aria-labelledby="tracks-title">
         <div class="screen-title-row">
           <div><div class="eyebrow">LIBRERIA / SQLITE</div><h1 id="tracks-title">Brani</h1><p>Organizza il tuo set e richiama il BPM con un tocco.</p></div>
-          <button id="newTrackButton" class="primary-button"><span>＋</span> NUOVO BRANO</button>
+          <button id="newTrackButton" class="primary-button"><span>＋</span> NUOVO BRANO GLOBALE</button>
         </div>
         <div class="library-grid">
           <aside class="playlists-panel">
@@ -81,6 +81,14 @@
           </aside>
           <div class="tracks-panel">
             <div class="panel-head"><div><p class="section-label">BRANI IN</p><h2 id="libraryPlaylistName">—</h2></div><span id="trackCount" class="count">0 BRANI</span></div>
+            <div class="song-catalog">
+              <div class="catalog-heading"><p class="section-label">LIBRERIA BRANI</p><span id="songLibraryCount">0 SALVATI</span></div>
+              <label class="song-search" for="songSearch">
+                <svg viewBox="0 0 512 512" aria-hidden="true"><path d="M416 208c0 46-15 88-41 123l119 119c15 15 15 39 0 54s-39 15-54 0L321 385c-35 25-77 39-123 39C88 424 0 336 0 226S88 28 198 28s218 70 218 180zm-218 144a126 126 0 1 0 0-252 126 126 0 1 0 0 252z"/></svg>
+                <input id="songSearch" type="search" autocomplete="off" placeholder="Cerca titolo, artista o BPM…">
+              </label>
+              <div id="songCatalogResults" class="song-catalog-results"></div>
+            </div>
             <div class="track-table-head"><span># / BRANO</span><span>ARTISTA</span><span>BPM</span><span></span></div>
             <div id="libraryTrackList" class="track-list"></div>
           </div>
@@ -107,7 +115,7 @@
 
   <dialog id="trackDialog">
     <form id="trackForm" method="dialog">
-      <div class="dialog-head"><div><p class="section-label">LIBRERIA</p><h2 id="trackDialogTitle">Nuovo brano</h2></div><button type="button" class="dialog-close" aria-label="Chiudi">×</button></div>
+      <div class="dialog-head"><div><p class="section-label">LIBRERIA GLOBALE</p><h2 id="trackDialogTitle">Nuovo brano</h2></div><button type="button" class="dialog-close" aria-label="Chiudi">×</button></div>
       <input type="hidden" name="id">
       <label>TITOLO<input name="title" required maxlength="100" placeholder="Nome del brano"></label>
       <label>ARTISTA<input name="artist" maxlength="100" placeholder="Artista (opzionale)"></label>
