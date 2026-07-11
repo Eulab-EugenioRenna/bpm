@@ -1,4 +1,4 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], songs: [], songQuery: '', playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], songs: [], songQuery: '', songMatches: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -37,7 +37,9 @@ function togglePlay() {
 }
 function useTrack(track) { setBpm(track.bpm,track.id); location.hash='player';showScreen('player');const pad=$(`.compact-track[data-use="${track.id}"]`);if(pad){$$('.compact-track').forEach(item=>item.classList.remove('launched'));requestAnimationFrame(()=>{pad.classList.add('launched');setTimeout(()=>pad.classList.remove('launched'),450);});}toast(`${track.title} · ${track.bpm} BPM`); }
 function tapTempo() { const now=performance.now(),last=state.tapTimes.at(-1);if(last&&now-last>2000)state.tapTimes=[];state.tapTimes.push(now);if(state.tapTimes.length>6)state.tapTimes.shift();const pulse=$('#pulse');pulse.classList.remove('beat','secondary');requestAnimationFrame(()=>pulse.classList.add('beat'));if(state.tapTimes.length<2)return;const intervals=state.tapTimes.slice(1).map((time,index)=>time-state.tapTimes[index]);const average=intervals.reduce((sum,value)=>sum+value,0)/intervals.length;const bpm=Math.round(60000/average);if(bpm>=20&&bpm<=300)setBpm(bpm); }
-function renderSongCatalog() { const playlist=currentPlaylist(),existing=new Set((playlist?.tracks||[]).map(track=>track.song_id));const query=state.songQuery.trim().toLocaleLowerCase('it');const matches=state.songs.filter(song=>!query||`${song.title} ${song.artist} ${song.bpm}`.toLocaleLowerCase('it').includes(query)).slice(0,8);$('#songLibraryCount').textContent=`${state.songs.length} SALVATI`;$('#songCatalogResults').innerHTML=matches.length?matches.map(song=>{const added=existing.has(song.id);return `<div class="catalog-song"><div><b>${escapeHtml(song.title)}</b><span>${escapeHtml(song.artist)||'Artista non indicato'}</span></div><strong>${song.bpm}</strong><button data-add-song="${song.id}" ${added?'disabled':''}>${added?'IMPORTATO':'＋ IMPORTA'}</button></div>`;}).join(''):`<div class="catalog-empty">Nessun brano trovato.</div>`; }
+function normalizeSearch(value='') { return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim(); }
+function renderVirtualSongs() { const viewport=$('#songCatalogResults');if(viewport.hidden)return;const rowHeight=55,start=Math.max(0,Math.floor(viewport.scrollTop/rowHeight)-1),end=Math.min(state.songMatches.length,start+5),playlist=currentPlaylist(),existing=new Set((playlist?.tracks||[]).map(track=>track.song_id));const windowEl=viewport.querySelector('.virtual-window');if(!windowEl)return;windowEl.innerHTML=state.songMatches.slice(start,end).map((song,index)=>{const added=existing.has(song.id),position=(start+index)*rowHeight;return `<div class="catalog-song" style="transform:translateY(${position}px)"><div><b>${escapeHtml(song.title)}</b><span>${escapeHtml(song.artist)||'Artista non indicato'}</span></div><strong>${song.bpm}</strong><button data-add-song="${song.id}" ${added?'disabled':''}>${added?'IMPORTATO':'＋ IMPORTA'}</button></div>`;}).join(''); }
+function renderSongCatalog() { const viewport=$('#songCatalogResults'),query=normalizeSearch(state.songQuery);$('#songLibraryCount').textContent=`${state.songs.length} SALVATI`;if(!query){state.songMatches=[];viewport.hidden=true;viewport.innerHTML='';return;}const terms=query.split(/\s+/);state.songMatches=state.songs.filter(song=>{const text=normalizeSearch(`${song.title} ${song.artist} ${song.bpm}`);return terms.every(term=>text.includes(term));});viewport.hidden=false;viewport.scrollTop=0;if(!state.songMatches.length){viewport.classList.add('no-results');viewport.innerHTML='<div class="catalog-empty">Nessun brano trovato.</div>';return;}viewport.classList.remove('no-results');viewport.innerHTML=`<div class="virtual-spacer" style="height:${state.songMatches.length*55}px"></div><div class="virtual-window"></div>`;renderVirtualSongs(); }
 
 function render() {
   const playlist = currentPlaylist();
@@ -86,6 +88,7 @@ $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showS
 $('#newTrackButton').addEventListener('click',()=>openTrack());
 $('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
 $('#songSearch').addEventListener('input',event=>{state.songQuery=event.target.value;renderSongCatalog();});
+$('#songCatalogResults').addEventListener('scroll',renderVirtualSongs,{passive:true});
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const deletePlaylist=e.target.closest('[data-delete-playlist]'); if(deletePlaylist){const item=state.library.find(p=>p.id===Number(deletePlaylist.dataset.deletePlaylist));if(item)openDeletePlaylistDialog(item);return;}
@@ -113,7 +116,7 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=16', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=18', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)){
