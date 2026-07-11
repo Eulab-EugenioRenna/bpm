@@ -8,7 +8,7 @@ PWA con metronomo audio, controllo BPM in tempo reale e libreria di playlist/bra
 python3 app.py
 ```
 
-Apri [http://127.0.0.1:8080](http://127.0.0.1:8080). Il database `bpm.sqlite3` viene creato automaticamente al primo avvio.
+Il server ascolta su `0.0.0.0:8080`. Apri `http://IP-DEL-SERVER:8080` da un dispositivo della rete. Il database `bpm.sqlite3` viene creato automaticamente al primo avvio.
 
 Su Linux puoi avviarla in background con:
 

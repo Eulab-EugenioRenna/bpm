@@ -22,7 +22,7 @@ start() {
   sleep 1
 
   if is_running; then
-    echo "BPM Studio avviato: http://127.0.0.1:8080"
+    echo "BPM Studio avviato: http://0.0.0.0:8080"
     echo "PID: $(cat "$PID_FILE")"
     echo "Log: $LOG_FILE"
   else
@@ -57,7 +57,7 @@ stop() {
 
 status() {
   if is_running; then
-    echo "BPM Studio attivo (PID $(cat "$PID_FILE")) — http://127.0.0.1:8080"
+    echo "BPM Studio attivo (PID $(cat "$PID_FILE")) — http://0.0.0.0:8080"
   else
     echo "BPM Studio non è attivo."
     exit 1

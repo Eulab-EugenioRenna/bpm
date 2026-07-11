@@ -153,5 +153,5 @@ class Handler(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     mimetypes.add_type("application/manifest+json", ".webmanifest")
     setup()
-    print("BPM Studio → http://127.0.0.1:8080")
-    ThreadingHTTPServer(("127.0.0.1", 8080), Handler).serve_forever()
+    print("BPM Studio → http://0.0.0.0:8080")
+    ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
