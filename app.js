@@ -16,6 +16,7 @@ function setBpm(value) {
   state.bpm = Math.max(20, Math.min(300, Math.round(Number(value) || 120)));
   $('#bpmInput').value = state.bpm; $('#bpmSlider').value = state.bpm;
   $('#bpmSlider').style.setProperty('--fill', `${(state.bpm - 20) / 280 * 100}%`);
+  $$('.compact-track[data-bpm]').forEach(pad=>pad.classList.toggle('active',Number(pad.dataset.bpm)===state.bpm));
   localStorage.setItem('bpm', state.bpm);
 }
 function click(accent=true) {
@@ -41,7 +42,7 @@ function render() {
   $('#trackCount').textContent = `${playlist?.tracks.length || 0} BRANI`;
   $('#playlistList').innerHTML = state.library.map(p => `<div class="playlist-item ${p.id===state.playlistId?'active':''}"><button class="playlist-select" data-playlist="${p.id}"><b>${escapeHtml(p.name)}</b><span>${p.tracks.length}</span></button><button class="playlist-delete" data-delete-playlist="${p.id}" aria-label="Elimina playlist ${escapeHtml(p.name)}" title="Elimina playlist">${solidIcon.trash}</button></div>`).join('');
   const empty = '<div class="empty">Nessun brano in questa playlist.</div>';
-  $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<div class="compact-track ${t.bpm===state.bpm?'active':''}" data-use="${t.id}"><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></div>`).join('') : empty;
+  $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<button class="compact-track ${t.bpm===state.bpm?'active':''}" data-use="${t.id}" data-bpm="${t.bpm}" aria-label="Imposta ${escapeHtml(t.title)}, ${t.bpm} BPM"><i aria-hidden="true"></i><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></button>`).join('') : empty;
   $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button class="action-use" data-use="${t.id}" title="Usa BPM" aria-label="Usa BPM di ${escapeHtml(t.title)}">${solidIcon.play}</button><button class="action-edit" data-edit="${t.id}" title="Modifica" aria-label="Modifica ${escapeHtml(t.title)}">${solidIcon.edit}</button><button class="action-delete" data-delete="${t.id}" title="Elimina" aria-label="Elimina ${escapeHtml(t.title)}">${solidIcon.trash}</button></div></div>`).join('') : empty;
 }
 function escapeHtml(s='') { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -82,7 +83,7 @@ $('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
   const deletePlaylist=e.target.closest('[data-delete-playlist]'); if(deletePlaylist){const item=state.library.find(p=>p.id===Number(deletePlaylist.dataset.deletePlaylist));if(item)openDeletePlaylistDialog(item);return;}
-  const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
+  const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t){if(use.classList.contains('compact-track')){use.classList.remove('launched');requestAnimationFrame(()=>use.classList.add('launched'));}useTrack(t);}return;}
   const edit=e.target.closest('[data-edit]'); if(edit){openTrack(findTrack(edit.dataset.edit));return;}
   const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
 });
@@ -105,6 +106,6 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=11', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=12', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
