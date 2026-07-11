@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+bpm.sqlite3
+
