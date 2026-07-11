@@ -10,6 +10,14 @@ python3 app.py
 
 Apri [http://127.0.0.1:8080](http://127.0.0.1:8080). Il database `bpm.sqlite3` viene creato automaticamente al primo avvio.
 
+Su Linux puoi avviarla in background con:
+
+```bash
+./run.sh
+```
+
+Sono disponibili anche `./run.sh stop`, `restart`, `status` e `logs`.
+
 Per installarla come app, usa **Installa app** dal menu del browser dopo aver aperto la pagina.
 
 ## Funzioni
