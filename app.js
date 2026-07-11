@@ -1,4 +1,4 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), playing: false, library: [], playlistId: null, audio: null, timer: null, nextBeat: 0, installPrompt: null, deleteTrackId: null };
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), playing: false, library: [], playlistId: null, audio: null, timer: null, nextBeat: 0, installPrompt: null, deleteTrackId: null, deletePlaylistId: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -37,7 +37,7 @@ function render() {
   const playlist = currentPlaylist();
   $('#activePlaylistName').textContent = playlist?.name || 'Nessuna playlist'; $('#libraryPlaylistName').textContent = playlist?.name || '—';
   $('#trackCount').textContent = `${playlist?.tracks.length || 0} BRANI`;
-  $('#playlistList').innerHTML = state.library.map(p => `<button class="playlist-item ${p.id===state.playlistId?'active':''}" data-playlist="${p.id}"><b>${escapeHtml(p.name)}</b><span>${p.tracks.length}</span></button>`).join('');
+  $('#playlistList').innerHTML = state.library.map(p => `<div class="playlist-item ${p.id===state.playlistId?'active':''}"><button class="playlist-select" data-playlist="${p.id}"><b>${escapeHtml(p.name)}</b><span>${p.tracks.length}</span></button><button class="playlist-delete" data-delete-playlist="${p.id}" aria-label="Elimina playlist ${escapeHtml(p.name)}" title="Elimina playlist">${solidIcon.trash}</button></div>`).join('');
   const empty = '<div class="empty">Nessun brano in questa playlist.</div>';
   $('#playerTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map(t => `<div class="compact-track ${t.bpm===state.bpm?'active':''}" data-use="${t.id}"><b>${escapeHtml(t.title)}</b><span>${t.bpm} BPM</span></div>`).join('') : empty;
   $('#libraryTrackList').innerHTML = playlist?.tracks.length ? playlist.tracks.map((t,i) => `<div class="track-row"><div class="track-main"><span class="track-number">${String(i+1).padStart(2,'0')}</span><b>${escapeHtml(t.title)}</b></div><span class="track-artist">${escapeHtml(t.artist)||'—'}</span><span class="track-bpm">${t.bpm}</span><div class="row-actions"><button class="action-use" data-use="${t.id}" title="Usa BPM" aria-label="Usa BPM di ${escapeHtml(t.title)}">${solidIcon.play}</button><button class="action-edit" data-edit="${t.id}" title="Modifica" aria-label="Modifica ${escapeHtml(t.title)}">${solidIcon.edit}</button><button class="action-delete" data-delete="${t.id}" title="Elimina" aria-label="Elimina ${escapeHtml(t.title)}">${solidIcon.trash}</button></div></div>`).join('') : empty;
@@ -49,6 +49,8 @@ function openTrack(track) { const form=$('#trackForm'); form.reset(); form.eleme
 function openPlaylistDialog() { const form=$('#playlistForm'); form.reset(); $('#playlistDialog').showModal(); requestAnimationFrame(()=>form.elements.name.focus()); }
 function openDeleteDialog(track) { state.deleteTrackId=track.id; $('#deleteTrackName').textContent=track.title; $('#deleteDialog').showModal(); }
 function closeDeleteDialog() { state.deleteTrackId=null; $('#deleteDialog').close(); }
+function openDeletePlaylistDialog(playlist) { state.deletePlaylistId=playlist.id; $('#deletePlaylistName').textContent=playlist.name; const count=playlist.tracks.length; $('#deletePlaylistTrackCount').textContent=`${count} ${count===1?'brano':'brani'}`; $('#deletePlaylistDialog').showModal(); }
+function closeDeletePlaylistDialog() { state.deletePlaylistId=null; $('#deletePlaylistDialog').close(); }
 function isStandalone() { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; }
 function installDismissedRecently() { const dismissed=Number(localStorage.getItem('installDismissedAt')||0); return Date.now()-dismissed < 7*24*60*60*1000; }
 function showInstallBanner() { if(isStandalone()||installDismissedRecently()) return; const banner=$('#installBanner'); banner.hidden=false; requestAnimationFrame(()=>banner.classList.add('visible')); }
@@ -65,6 +67,7 @@ $('#newTrackButton').addEventListener('click', () => state.playlistId ? openTrac
 $('#newPlaylistButton').addEventListener('click',openPlaylistDialog);
 document.addEventListener('click', async e => {
   const playlist=e.target.closest('[data-playlist]'); if(playlist){state.playlistId=Number(playlist.dataset.playlist);render();return;}
+  const deletePlaylist=e.target.closest('[data-delete-playlist]'); if(deletePlaylist){const item=state.library.find(p=>p.id===Number(deletePlaylist.dataset.deletePlaylist));if(item)openDeletePlaylistDialog(item);return;}
   const use=e.target.closest('[data-use]'); if(use){const t=findTrack(use.dataset.use);if(t)useTrack(t);return;}
   const edit=e.target.closest('[data-edit]'); if(edit){openTrack(findTrack(edit.dataset.edit));return;}
   const del=e.target.closest('[data-delete]'); if(del){const track=findTrack(del.dataset.delete);if(track)openDeleteDialog(track);}
@@ -76,6 +79,8 @@ $('#closePlaylistDialog').addEventListener('click',()=>$('#playlistDialog').clos
 $('#cancelPlaylist').addEventListener('click',()=>$('#playlistDialog').close());
 $('#cancelDelete').addEventListener('click',closeDeleteDialog);
 $('#confirmDelete').addEventListener('click',async()=>{if(!state.deleteTrackId)return;const id=state.deleteTrackId;try{await api(`/api/tracks/${id}`,{method:'DELETE'});closeDeleteDialog();await loadLibrary();toast('Brano eliminato');}catch(error){toast(error.message);}});
+$('#cancelDeletePlaylist').addEventListener('click',closeDeletePlaylistDialog);
+$('#confirmDeletePlaylist').addEventListener('click',async()=>{if(!state.deletePlaylistId)return;const id=state.deletePlaylistId;try{await api(`/api/playlists/${id}`,{method:'DELETE'});closeDeletePlaylistDialog();state.playlistId=null;await loadLibrary();toast('Playlist eliminata');}catch(error){toast(error.message);}});
 window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();state.installPrompt=event;showInstallBanner();});
 window.addEventListener('appinstalled',()=>{state.installPrompt=null;hideInstallBanner();toast('BPM Studio installata');});
 $('#installButton').addEventListener('click',async()=>{
@@ -86,5 +91,5 @@ $('#installButton').addEventListener('click',async()=>{
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 setBpm(state.bpm); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=7', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=8', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);

@@ -133,6 +133,20 @@
       </div>
     </div>
   </dialog>
+  <dialog id="deletePlaylistDialog" class="delete-dialog">
+    <div class="delete-dialog-body">
+      <div class="delete-symbol" aria-hidden="true">
+        <svg viewBox="0 0 448 512"><path d="M136 17C140 7 150 0 161 0h126c11 0 21 7 25 17l11 31h77c13 0 24 11 24 24s-11 24-24 24H48C35 96 24 85 24 72s11-24 24-24h77l11-31zm-88 95h352l-16 354c-1 26-22 46-48 46H112c-26 0-47-20-48-46L48 112z"/></svg>
+      </div>
+      <p class="section-label">ELIMINA PLAYLIST</p>
+      <h2>Eliminare la playlist?</h2>
+      <p><strong id="deletePlaylistName">Questa playlist</strong> e i suoi <span id="deletePlaylistTrackCount">0 brani</span> verranno eliminati definitivamente.</p>
+      <div class="delete-actions">
+        <button id="cancelDeletePlaylist" class="cancel-button" type="button">ANNULLA</button>
+        <button id="confirmDeletePlaylist" class="danger-button" type="button">ELIMINA PLAYLIST</button>
+      </div>
+    </div>
+  </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script src="/app.js" defer></script>
 </body>
