@@ -109,6 +109,8 @@ $('#pulse').addEventListener('click',tapTempo);
 $$('.division-option').forEach(button=>button.addEventListener('click',()=>setDivision(button.dataset.subdivision)));
 $$('.meter-option').forEach(button=>button.addEventListener('click',()=>setMeter(button.dataset.meter)));
 $$('.touch-selector-trigger').forEach(setupLongPressSelector);
+$('.rhythm-controls').addEventListener('selectstart',event=>event.preventDefault());
+$('.rhythm-controls').addEventListener('dragstart',event=>event.preventDefault());
 $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Number(b.dataset.delta))));
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
 $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showScreen('tracks'); });
@@ -144,7 +146,7 @@ $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 document.addEventListener('visibilitychange',()=>{if(document.hidden){state.pulseAnimation?.cancel();state.pulseAnimation=null;clearTimeout(state.pulseFallbackTimer);return;}if(state.playing){clearTimeout(state.timer);state.subdivision=0;schedule();}});
 setBpm(state.bpm);renderMeter();renderDivision();showScreen(location.hash==='#tracks'?'tracks':'player');loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=25', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=26', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)){
