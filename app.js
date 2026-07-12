@@ -1,4 +1,6 @@
-const state = { bpm: Number(localStorage.getItem('bpm') || 120), subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], songs: [], songQuery: '', songMatches: [], playlistId: null, audio: null, timer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
+const METER_BEATS={'OFF':1,'2/4':2,'3/4':3,'4/4':4,'6/8':2};
+const savedMeter=localStorage.getItem('meter');
+const state = { bpm: Number(localStorage.getItem('bpm') || 120), meter:METER_BEATS[savedMeter]?savedMeter:'4/4', subdivisionMode: Math.max(1,Math.min(4,Number(localStorage.getItem('subdivisionMode')||1))), subdivision: 0, selectedTrackId: null, tapTimes: [], playing: false, library: [], songs: [], songQuery: '', songMatches: [], playlistId: null, audio: null, timer: null, pulseAnimation: null, pulseFallbackTimer: null, installPrompt: null, deleteTrackId: null, deletePlaylistId: null, clientId: crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`, syncTimer: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -20,23 +22,46 @@ function setBpm(value, trackId=null) {
   $$('.compact-track').forEach(pad=>pad.classList.toggle('active',Number(pad.dataset.use)===state.selectedTrackId));
   localStorage.setItem('bpm', state.bpm);
 }
-function click(accent=true) {
-  const ctx = state.audio; if (!ctx) return;
-  const osc = ctx.createOscillator(), gain = ctx.createGain();
-  osc.frequency.value = accent ? 1380 : 720; gain.gain.setValueAtTime(accent ? .28 : .11, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + (accent ? .06 : .035));
-  osc.connect(gain).connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + (accent ? .065 : .04));
-  const pulse = $('#pulse'); pulse.classList.remove('beat','secondary'); requestAnimationFrame(() => { pulse.classList.toggle('secondary',!accent); pulse.classList.add('beat'); });
+function animatePulse(level='primary') {
+  const pulse=$('#pulse'),dot=pulse.querySelector('span'),interval=60000/state.bpm/state.subdivisionMode,durations={primary:150,beat:125,subdivision:100},duration=Math.min(durations[level],Math.max(30,interval*.68)),visuals={primary:{scale:2.15,color:'#c7ff39',shadow:'0 0 35px #c7ff39'},beat:{scale:1.78,color:'#a9d54b',shadow:'0 0 24px #a9d54baa'},subdivision:{scale:1.45,color:'#a5aa9c',shadow:'0 0 16px #a5aa9c88'}},visual=visuals[level];
+  state.pulseAnimation?.cancel();clearTimeout(state.pulseFallbackTimer);pulse.classList.remove('beat','secondary');
+  if(typeof dot.animate==='function'){
+    state.pulseAnimation=dot.animate([
+      {transform:`scale(${visual.scale})`,background:visual.color,boxShadow:visual.shadow},
+      {transform:'scale(1)',background:'#30352d',boxShadow:'0 0 0 #0000'}
+    ],{duration,easing:'cubic-bezier(.2,.8,.2,1)'});
+    state.pulseAnimation.onfinish=()=>{state.pulseAnimation=null;};
+    return;
+  }
+  pulse.classList.toggle('secondary',level!=='primary');void dot.offsetWidth;pulse.classList.add('beat');state.pulseFallbackTimer=setTimeout(()=>pulse.classList.remove('beat','secondary'),duration);
 }
-function schedule() { if (!state.playing) return; const accent=state.subdivision%state.subdivisionMode===0; click(accent); state.subdivision+=1; state.timer=setTimeout(schedule,60000/state.bpm/state.subdivisionMode); }
-function renderDivision() { $$('.division-option').forEach(button=>{const active=Number(button.dataset.subdivision)===state.subdivisionMode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));}); }
+function click(level='primary') {
+  const ctx = state.audio; if (!ctx) return;
+  const sounds={primary:{frequency:1380,gain:.28,duration:.065},beat:{frequency:1020,gain:.18,duration:.05},subdivision:{frequency:720,gain:.11,duration:.04}},sound=sounds[level],osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.frequency.value=sound.frequency;gain.gain.setValueAtTime(sound.gain,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+sound.duration-.005);
+  osc.connect(gain).connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+sound.duration);
+  animatePulse(level);
+}
+function schedule() { if (!state.playing) return;const positionInBeat=state.subdivision%state.subdivisionMode,beatIndex=Math.floor(state.subdivision/state.subdivisionMode)%METER_BEATS[state.meter],level=positionInBeat===0?(beatIndex===0?'primary':'beat'):'subdivision';click(level);state.subdivision+=1;state.timer=setTimeout(schedule,60000/state.bpm/state.subdivisionMode); }
+function renderMeter() { $$('.meter-option').forEach(button=>{const active=button.dataset.meter===state.meter;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});$('#meterTriggerValue').textContent=state.meter; }
+function setMeter(value) { if(!METER_BEATS[value])return;state.meter=value;state.subdivision=0;localStorage.setItem('meter',value);renderMeter();if(state.playing){clearTimeout(state.timer);schedule();}toast(`Battuta: ${value}`); }
+function renderDivision() { $$('.division-option').forEach(button=>{const active=Number(button.dataset.subdivision)===state.subdivisionMode;button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));});$('#divisionTriggerValue').textContent={1:'1/4',2:'1/8',3:'×3',4:'1/16'}[state.subdivisionMode]; }
 function setDivision(value) { state.subdivisionMode=Number(value);state.subdivision=0;localStorage.setItem('subdivisionMode',state.subdivisionMode);renderDivision();if(state.playing){clearTimeout(state.timer);schedule();}const labels={1:'Quarti',2:'Ottavi',3:'Terzine',4:'Sedicesimi'};toast(`Suddivisione: ${labels[state.subdivisionMode]}`); }
+function setupLongPressSelector(trigger) {
+  const selector=$(`#${trigger.dataset.selector}`),options=[...selector.querySelectorAll('button')];let timer=null,opened=false,hovered=null,startX=0,startY=0,suppressClick=false;
+  const close=()=>{selector.classList.remove('touch-open');selector.style.removeProperty('left');selector.style.removeProperty('right');selector.style.removeProperty('top');options.forEach(option=>option.classList.remove('touch-hover'));hovered=null;};
+  trigger.addEventListener('pointerdown',event=>{if(innerWidth>760)return;startX=event.clientX;startY=event.clientY;opened=false;trigger.setPointerCapture(event.pointerId);timer=setTimeout(()=>{opened=true;suppressClick=true;const active=Math.max(0,options.findIndex(option=>option.classList.contains('active'))),edgeOffset=24,width=Math.min(72,(innerWidth-edgeOffset*2-12)/options.length),touchX=event.clientX,touchY=event.clientY;selector.style.setProperty('--touch-option-width',`${width}px`);selector.style.left=`${edgeOffset}px`;selector.style.top=`${Math.max(edgeOffset,touchY-25)}px`;selector.classList.add('touch-open');hovered=options[active];hovered?.classList.add('touch-hover');requestAnimationFrame(()=>{const rect=selector.getBoundingClientRect(),activeRect=options[active].getBoundingClientRect(),activeCenterOffset=activeRect.left+activeRect.width/2-rect.left,maxLeft=Math.max(edgeOffset,innerWidth-edgeOffset-rect.width),desiredLeft=touchX-activeCenterOffset,top=Math.max(edgeOffset,Math.min(innerHeight-edgeOffset-rect.height,touchY-rect.height/2)),left=Math.max(edgeOffset,Math.min(maxLeft,desiredLeft));selector.style.removeProperty('right');selector.style.left=`${left}px`;selector.style.top=`${top}px`;});navigator.vibrate?.(12);},420);});
+  trigger.addEventListener('pointermove',event=>{if(!opened){if(Math.hypot(event.clientX-startX,event.clientY-startY)>12)clearTimeout(timer);return;}const option=document.elementFromPoint(event.clientX,event.clientY)?.closest(`#${selector.id} button`);if(option&&option!==hovered){options.forEach(item=>item.classList.remove('touch-hover'));hovered=option;hovered.classList.add('touch-hover');navigator.vibrate?.(5);}});
+  const finish=()=>{clearTimeout(timer);if(opened&&hovered){hovered.dataset.meter?setMeter(hovered.dataset.meter):setDivision(hovered.dataset.subdivision);}close();opened=false;};
+  trigger.addEventListener('pointerup',finish);trigger.addEventListener('pointercancel',()=>{clearTimeout(timer);close();opened=false;});trigger.addEventListener('contextmenu',event=>event.preventDefault());trigger.addEventListener('click',event=>{if(innerWidth>760)return;event.preventDefault();if(suppressClick){suppressClick=false;return;}toast('Tieni premuto e trascina');});
+}
 function togglePlay() {
   state.playing = !state.playing; const button = $('#playButton'); button.classList.toggle('playing', state.playing); button.ariaLabel = state.playing ? 'Pausa metronomo' : 'Avvia metronomo';
   if (state.playing) { state.subdivision=0; state.audio ||= new (window.AudioContext || window.webkitAudioContext)(); state.audio.resume(); schedule(); }
   else { clearTimeout(state.timer); state.subdivision=0; }
 }
 function useTrack(track) { setBpm(track.bpm,track.id); location.hash='player';showScreen('player');const pad=$(`.compact-track[data-use="${track.id}"]`);if(pad){$$('.compact-track').forEach(item=>item.classList.remove('launched'));requestAnimationFrame(()=>{pad.classList.add('launched');setTimeout(()=>pad.classList.remove('launched'),450);});}toast(`${track.title} · ${track.bpm} BPM`); }
-function tapTempo() { const now=performance.now(),last=state.tapTimes.at(-1);if(last&&now-last>2000)state.tapTimes=[];state.tapTimes.push(now);if(state.tapTimes.length>6)state.tapTimes.shift();const pulse=$('#pulse');pulse.classList.remove('beat','secondary');requestAnimationFrame(()=>pulse.classList.add('beat'));if(state.tapTimes.length<2)return;const intervals=state.tapTimes.slice(1).map((time,index)=>time-state.tapTimes[index]);const average=intervals.reduce((sum,value)=>sum+value,0)/intervals.length;const bpm=Math.round(60000/average);if(bpm>=20&&bpm<=300)setBpm(bpm); }
+function tapTempo() { const now=performance.now(),last=state.tapTimes.at(-1);if(last&&now-last>2000)state.tapTimes=[];state.tapTimes.push(now);if(state.tapTimes.length>6)state.tapTimes.shift();animatePulse('primary');if(state.tapTimes.length<2)return;const intervals=state.tapTimes.slice(1).map((time,index)=>time-state.tapTimes[index]);const average=intervals.reduce((sum,value)=>sum+value,0)/intervals.length;const bpm=Math.round(60000/average);if(bpm>=20&&bpm<=300)setBpm(bpm); }
 function normalizeSearch(value='') { return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('it').trim(); }
 function renderVirtualSongs() { const viewport=$('#songCatalogResults');if(viewport.hidden)return;const rowHeight=55,start=Math.max(0,Math.floor(viewport.scrollTop/rowHeight)-1),end=Math.min(state.songMatches.length,start+5),playlist=currentPlaylist(),existing=new Set((playlist?.tracks||[]).map(track=>track.song_id));const windowEl=viewport.querySelector('.virtual-window');if(!windowEl)return;windowEl.innerHTML=state.songMatches.slice(start,end).map((song,index)=>{const added=existing.has(song.id),position=(start+index)*rowHeight;return `<div class="catalog-song" style="transform:translateY(${position}px)"><div><b>${escapeHtml(song.title)}</b><span>${escapeHtml(song.artist)||'Artista non indicato'}</span></div><strong>${song.bpm}</strong><button data-add-song="${song.id}" ${added?'disabled':''}>${added?'IMPORTATO':'＋ IMPORTA'}</button></div>`;}).join(''); }
 function renderSongCatalog() { const viewport=$('#songCatalogResults'),query=normalizeSearch(state.songQuery);$('#songLibraryCount').textContent=`${state.songs.length} SALVATI`;if(!query){state.songMatches=[];viewport.hidden=true;viewport.innerHTML='';return;}const terms=query.split(/\s+/);state.songMatches=state.songs.filter(song=>{const text=normalizeSearch(`${song.title} ${song.artist} ${song.bpm}`);return terms.every(term=>text.includes(term));});viewport.hidden=false;viewport.scrollTop=0;if(!state.songMatches.length){viewport.classList.add('no-results');viewport.innerHTML='<div class="catalog-empty">Nessun brano trovato.</div>';return;}viewport.classList.remove('no-results');viewport.innerHTML=`<div class="virtual-spacer" style="height:${state.songMatches.length*55}px"></div><div class="virtual-window"></div>`;renderVirtualSongs(); }
@@ -82,6 +107,8 @@ $('#bpmInput').addEventListener('focus', e => e.target.select());
 $('#playButton').addEventListener('click', togglePlay);
 $('#pulse').addEventListener('click',tapTempo);
 $$('.division-option').forEach(button=>button.addEventListener('click',()=>setDivision(button.dataset.subdivision)));
+$$('.meter-option').forEach(button=>button.addEventListener('click',()=>setMeter(button.dataset.meter)));
+$$('.touch-selector-trigger').forEach(setupLongPressSelector);
 $$('.step').forEach(b => b.addEventListener('click', () => setBpm(state.bpm + Number(b.dataset.delta))));
 $$('.bottom-nav a').forEach(a => a.addEventListener('click', () => showScreen(a.dataset.screen)));
 $('#openTracks').addEventListener('click', () => { location.hash='tracks'; showScreen('tracks'); });
@@ -115,8 +142,9 @@ $('#installButton').addEventListener('click',async()=>{
 });
 $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
-setBpm(state.bpm); renderDivision(); showScreen(location.hash==='#tracks'?'tracks':'player'); loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=18', {updateViaCache:'none'});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){state.pulseAnimation?.cancel();state.pulseAnimation=null;clearTimeout(state.pulseFallbackTimer);return;}if(state.playing){clearTimeout(state.timer);state.subdivision=0;schedule();}});
+setBpm(state.bpm);renderMeter();renderDivision();showScreen(location.hash==='#tracks'?'tracks':'player');loadLibrary().catch(()=>toast('Server non raggiungibile'));
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=25', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)){

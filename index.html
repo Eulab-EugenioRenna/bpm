@@ -49,13 +49,27 @@
             <button class="step" data-delta="1">+1</button>
             <button class="step" data-delta="10">+10</button>
           </div>
-          <div class="division-control">
-            <span class="section-label">SUDDIVISIONE</span>
-            <div class="division-selector" role="group" aria-label="Suddivisione metronomo">
-              <button class="division-option" type="button" data-subdivision="1"><b>1/4</b><span>QUARTI</span></button>
-              <button class="division-option" type="button" data-subdivision="2"><b>1/8</b><span>OTTAVI</span></button>
-              <button class="division-option" type="button" data-subdivision="3"><b>×3</b><span>TERZINE</span></button>
-              <button class="division-option" type="button" data-subdivision="4"><b>1/16</b><span>SEDICESIMI</span></button>
+          <div class="rhythm-controls">
+            <div class="meter-control">
+              <span class="section-label">BATTUTA</span>
+              <button class="touch-selector-trigger" type="button" data-selector="meterSelector"><span>BATTUTA</span><b id="meterTriggerValue">4/4</b></button>
+              <div id="meterSelector" class="meter-selector" role="group" aria-label="Battuta musicale">
+                <button class="meter-option" type="button" data-meter="OFF">OFF</button>
+                <button class="meter-option" type="button" data-meter="2/4">2/4</button>
+                <button class="meter-option" type="button" data-meter="3/4">3/4</button>
+                <button class="meter-option" type="button" data-meter="4/4">4/4</button>
+                <button class="meter-option" type="button" data-meter="6/8">6/8</button>
+              </div>
+            </div>
+            <div class="division-control">
+              <span class="section-label">SUDDIVISIONE</span>
+              <button class="touch-selector-trigger" type="button" data-selector="divisionSelector"><span>SUDDIVISIONE</span><b id="divisionTriggerValue">1/4</b></button>
+              <div id="divisionSelector" class="division-selector" role="group" aria-label="Suddivisione metronomo">
+                <button class="division-option" type="button" data-subdivision="1"><b>1/4</b><span>QUARTI</span></button>
+                <button class="division-option" type="button" data-subdivision="2"><b>1/8</b><span>OTTAVI</span></button>
+                <button class="division-option" type="button" data-subdivision="3"><b>×3</b><span>TERZINE</span></button>
+                <button class="division-option" type="button" data-subdivision="4"><b>1/16</b><span>SEDICESIMI</span></button>
+              </div>
             </div>
           </div>
         </div>
