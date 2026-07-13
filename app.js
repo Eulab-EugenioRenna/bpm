@@ -43,7 +43,7 @@ function drawScheduledPulses() {
 }
 function click(level='primary',time=state.audio?.currentTime) {
   const ctx = state.audio; if (!ctx) return;
-  const sounds={primary:{frequency:1380,gain:.28,duration:.065},beat:{frequency:1020,gain:.18,duration:.05},subdivision:{frequency:720,gain:.11,duration:.04}},sound=sounds[level],osc=ctx.createOscillator(),gain=ctx.createGain();
+  const sounds={primary:{frequency:1380,gain:.50,duration:.065},beat:{frequency:1020,gain:.32,duration:.05},subdivision:{frequency:720,gain:.20,duration:.04}},sound=sounds[level],osc=ctx.createOscillator(),gain=ctx.createGain();
   osc.frequency.value=sound.frequency;gain.gain.setValueAtTime(sound.gain,time);gain.gain.exponentialRampToValueAtTime(.001,time+sound.duration-.005);
   osc.connect(gain).connect(ctx.destination);osc.start(time);osc.stop(time+sound.duration);state.scheduledSources.set(osc,time);osc.onended=()=>state.scheduledSources.delete(osc);
   state.pulseQueue.push({level,time});
@@ -165,7 +165,7 @@ $('#dismissInstall').addEventListener('click',()=>hideInstallBanner(true));
 window.addEventListener('hashchange',()=>showScreen(location.hash==='#tracks'?'tracks':'player'));
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopScheduler();state.pulseAnimation?.cancel();state.pulseAnimation=null;clearTimeout(state.pulseFallbackTimer);return;}if(state.playing){state.subdivision=0;resumeScheduler();}});
 setBpm(state.bpm);renderMeter();renderDivision();showScreen(location.hash==='#tracks'?'tracks':'player');loadLibrary().catch(()=>toast('Server non raggiungibile'));
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=29', {updateViaCache:'none'});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js?v=30', {updateViaCache:'none'});
 if(!isStandalone()&&/iphone|ipad|ipod/i.test(navigator.userAgent))setTimeout(showInstallBanner,1200);
 connectRealtime();
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)){
