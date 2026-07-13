@@ -103,7 +103,9 @@ class Handler(SimpleHTTPRequestHandler):
         return str(ROOT / clean)
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-cache" if self.path.startswith("/api/") else "public, max-age=300")
+        path = urlparse(self.path).path
+        no_cache = path.startswith("/api/") or path in {"/", "/index.html", "/sw.js"}
+        self.send_header("Cache-Control", "no-cache" if no_cache else "public, max-age=300")
         super().end_headers()
 
     def json(self, data, status=200):
