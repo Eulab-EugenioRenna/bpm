@@ -4,7 +4,7 @@
   else root.AudioClockScheduler = api.AudioClockScheduler;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   class AudioClockScheduler {
-    constructor({ currentTime, interval, setTimer = setTimeout, clearTimer = clearTimeout, lookAhead = 0.1, wakeEvery = 25, startLead = 0.01 }) {
+    constructor({ currentTime, interval, setTimer = (callback, delay) => globalThis.setTimeout(callback, delay), clearTimer = timer => globalThis.clearTimeout(timer), lookAhead = 0.1, wakeEvery = 25, startLead = 0.01 }) {
       this.currentTime = currentTime;
       this.interval = interval;
       this.setTimer = setTimer;

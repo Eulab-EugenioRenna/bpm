@@ -86,3 +86,24 @@ test('retimes the next beat on the audio clock when tempo changes', () => {
     { time: 0.63, step: 1 },
   ]);
 });
+
+test('invokes native browser timers with the global receiver', () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  globalThis.setTimeout = function () {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    return 1;
+  };
+  globalThis.clearTimeout = function () {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+  };
+
+  try {
+    const scheduler = new AudioClockScheduler({ currentTime: () => 0, interval: () => 0.5 });
+    assert.doesNotThrow(() => scheduler.start(() => {}));
+    assert.doesNotThrow(() => scheduler.stop());
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
